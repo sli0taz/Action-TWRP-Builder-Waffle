@@ -177,7 +177,7 @@ jobs:
         cd bootable/recovery/gui/theme/common/languages/
         rm zh_TW.xml
         cp ${GITHUB_WORKSPACE}/patch/zh_TW.xml .
-        cd ../../../../
+        cd ../../../../../../
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
