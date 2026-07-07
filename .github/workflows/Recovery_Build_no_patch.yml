@@ -1,0 +1,112 @@
+name: Recovery Build (PBRP - 无补丁纯净版)
+
+on:
+  workflow_dispatch:
+    inputs:
+      MANIFEST_URL:
+        description: 'PBRP Manifest URL'
+        required: true
+        default: 'https://github.com/PitchBlackRecoveryProject/manifest_pb'
+      MANIFEST_BRANCH:
+        description: 'PBRP 分支 (根据机型 Android 版本选择)'
+        required: true
+        default: 'android-12.1'
+      DEVICE_TREE_URL:
+        description: '设备树 (Device Tree) 仓库地址'
+        required: true
+        default: 'https://github.com/snowwolf725/device_oneplus_waffle-TWRP'
+      DEVICE_TREE_BRANCH:
+        description: '设备树分支'
+        required: true
+        default: 'android-12.1'
+      DEVICE_PATH:
+        description: '设备树路径 (例如 device/oneplus/waffle)'
+        required: true
+        default: 'device/oneplus/waffle'
+      DEVICE_NAME:
+        description: '设备代号 (例如 waffle)'
+        required: true
+        default: 'waffle'
+      MAKEFILE_NAME:
+        description: 'Makefile 名称 (通常是 twrp_设备代号)'
+        required: true
+        default: 'twrp_waffle'
+      BUILD_TARGET:
+        description: '编译目标 (recovery / boot / vendorboot)'
+        required: true
+        default: 'recovery'
+
+jobs:
+  build:
+    name: Build PBRP
+    runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+
+    steps:
+    - name: 检出当前仓库代码
+      uses: actions/checkout@v3
+
+    - name: 清理 Ubuntu 运行环境空间
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: 设置 Swap 虚拟内存 (防止编译爆内存)
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-sizeGB: 12
+
+    - name: 安装编译依赖环境
+      run: |
+        sudo apt update
+        sudo apt -y upgrade
+        sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3
+
+    - name: 安装 Repo 工具
+      run: |
+        mkdir ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+
+    - name: 初始化 PBRP 源码仓库
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+      id: pwd
+
+    - name: 同步 PBRP 源码 (Repo Sync)
+      run: |
+        repo sync -j$(nproc --all) --force-sync
+      working-directory: workspace
+
+    - name: 克隆指定的设备树
+      run: |
+        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: 开始编译 Recovery
+      run: |
+        # 注意这里：之前带有 git apply patch 的命令已被全部剔除
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
+        mka ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: 上传编译结果到 Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip
+        name: PBRP-Clean-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          纯净版 PBRP 编译 (无强制卸载/解密补丁)
+          设备: ${{ github.event.inputs.DEVICE_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
