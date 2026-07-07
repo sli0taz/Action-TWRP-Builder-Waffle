@@ -178,6 +178,8 @@ jobs:
         rm zh_TW.xml
         cp ${GITHUB_WORKSPACE}/patch/zh_TW.xml .
         cd ../../../../../../
+        echo "TARGET_RECOVERY_DEVICE_MODULES += zstd" >> ${{ github.event.inputs.DEVICE_PATH }}/${{ github.event.inputs.MAKEFILE_NAME }}.mk
+        echo "TW_RECOVERY_ADDITIONAL_RELINK_FILES += \$(TARGET_OUT_EXECUTABLES)/zstd" >> ${{ github.event.inputs.DEVICE_PATH }}/${{ github.event.inputs.MAKEFILE_NAME }}.mk
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
