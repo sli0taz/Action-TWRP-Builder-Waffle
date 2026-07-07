@@ -197,17 +197,18 @@ jobs:
     - name: Setup SkyHawk dark
       run: |
         cd android-recovery
-        echo "SHRP_DARK := true" >> ${{ github.event.inputs.DEVICE_PATH }}/${{ github.event.inputs.MAKEFILE_NAME }}.mk
+        # 使用 sed 命令将 SHRP_DARK := true 强制插入到 makefile 的第一行，确保优先加载
+        sed -i '1i SHRP_DARK := true' ${{ github.event.inputs.DEVICE_PATH }}/${{ github.event.inputs.MAKEFILE_NAME }}.mk
         
     - name: Building SkyHawk Dark
       run: |
         cd android-recovery
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && mka ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
+        # 加上 make clean，强制清除刚才编译亮色主题留下的缓存！
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && mka ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
         echo "Done building your ${{ inputs.BUILD_TARGET }}.img"
-        cp out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ env.BUILD_TARGET_NAME }}.img ../${{ env.BUILD_TARGET_NAME }}_dark.img
-        
+        cp out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ env.BUILD_TARGET_NAME }}.img ../${{ env.BUILD_TARGET_NAME }}_dark.img        
     - name: Set Build Date # Output will be use in Release
       run: |
         echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
